@@ -1,0 +1,122 @@
+/**
+ * Generador automático y nativo de Tabla de Contenidos (ToC)
+ * Se ejecuta en el filtro 'the_content' para entradas y páginas.
+ */
+function wpr_auto_table_of_contents($content) {
+    // Aplicar únicamente en entradas o páginas individuales
+    if (!is_singular() || empty($content)) {
+        return $content;
+    }
+
+    $headings = [];
+    $slugs = [];
+
+    // Buscar etiquetas h2 y h3 en el contenido HTML
+    $content = preg_replace_callback('/<h([23])([^>]*)>(.*?)<\/h\1>/i', function($matches) use (&$headings, &$slugs) {
+        $level = $matches[1];
+        $attr = $matches[2];
+        $text = $matches[3];
+        
+        // Si el encabezado ya tiene un ID definido, lo respetamos
+        if (preg_match('/id=["\']([^"\']+)["\']/i', $attr, $id_match)) {
+            $id = $id_match[1];
+        } else {
+            // Generar un ID limpio y único basado en el texto del encabezado
+            $base_id = sanitize_title(strip_tags($text));
+            $id = $base_id;
+            $counter = 1;
+            
+            // Evitar duplicados de IDs en la misma página
+            while (in_array($id, $slugs)) {
+                $id = $base_id . '-' . $counter;
+                $counter++;
+            }
+            
+            $attr .= ' id="' . esc_attr($id) . '"';
+        }
+        
+        // Guardar slug para control de unicidad
+        $slugs[] = $id;
+        
+        // Registrar encabezado para la tabla
+        $headings[] = [
+            'level' => $level,
+            'id'    => $id,
+            'text'  => strip_tags($text)
+        ];
+        
+        return '<h' . $level . $attr . '>' . $text . '</h' . $level . '>';
+    }, $content);
+
+    // Si hay menos de 2 encabezados, no se genera el índice (no tiene sentido)
+    if (count($headings) < 2) {
+        return $content;
+    }
+
+    // Construcción de la estructura HTML semántica (<nav>)
+    $toc = '<nav class="post-toc" aria-label="Tabla de contenidos">';
+    $toc .= '<span class="toc-title">Índice de contenidos</span>';
+    $toc .= '<ul>';
+    
+    foreach ($headings as $h) {
+        $toc .= sprintf(
+            '<li class="toc-item toc-h%d"><a href="#%s">%s</a></li>',
+            $h['level'],
+            esc_attr($h['id']),
+            esc_html($h['text'])
+        );
+    }
+    
+    $toc .= '</ul>';
+    $toc .= '</nav>';
+
+    // Devolver el índice concatenado antes del contenido principal
+    return $toc . $content;
+}
+add_filter('the_content', 'wpr_auto_table_of_contents', 20);
+
+
+/********************************************
+ una tabla de contenido
+************************************************************/
+.post-toc {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 1.25rem 0.5rem;
+    margin: 1.5rem 0 2rem 0;
+    font-size: 0.95rem;
+}
+
+.post-toc .toc-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+.post-toc ul {
+    list-style-type: disc;
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.post-toc ul li {
+    margin-bottom: 0.35rem;
+}
+
+/* Indentación visual para los subtítulos (H3) */
+.post-toc ul li.toc-h3 {
+    margin-left: 1rem;
+    list-style-type: circle;
+}
+
+.post-toc a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.post-toc a:hover {
+    text-decoration: underline;
+}
